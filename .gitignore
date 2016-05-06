@@ -1,0 +1,9 @@
+*~
+*.bak
+*.swp
+*.tmp
+*.pyc
+.project
+.pydevproject
+.settings
+twistd.pid

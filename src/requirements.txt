@@ -1,0 +1,6 @@
+Twisted==13.1.0
+PyYAML==3.11
+pyOpenSSL==0.10
+pycrypto==2.6.1
+service-identity==14.0.0
+
