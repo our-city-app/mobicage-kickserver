@@ -1,0 +1,393 @@
+# -*- coding: utf-8 -*-
+# Copyright 2016 Mobicage NV
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# @@license_version:1.1@@
+
+import hashlib
+import json
+import time
+from contextlib import closing
+
+from twisted.internet.defer import Deferred
+from twisted.web.http_headers import Headers
+
+from news.models import NewsInfo
+from util import StringProducer, ReceiverProtocol
+
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
+from collections import defaultdict
+from twisted.internet.protocol import Factory
+from twisted.protocols.basic import LineOnlyReceiver
+from twisted.internet import reactor
+from twisted.python import log
+from configuration import configuration, NEWS_SERVER_AUTH_TIMEOUT, NEWS_SERVER_READ_UPDATES_TIMEOUT, \
+    NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT, NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE, HTTP_AUTH_PATH, HTTP_BASE_URL, \
+    HTTP_NEWS_PATH, NEWS_SERVER_SAVE_STATS_TIMEOUT, APP_ENGINE_SECRET
+
+BASE_URL = configuration[HTTP_BASE_URL]
+
+
+class NewsProtocol(LineOnlyReceiver):
+    commands = {}
+    log.msg('initializing protocol')
+
+    def __init__(self):
+        self.connected = False
+        self.authenticated = False
+        self.app = None
+        self.friends = []
+        self.account = None
+
+    def connectionMade(self):
+        self.connected = True
+        self.sendLine('CONNECTED')
+
+        # Close unauthenticated connections after NEWS_SERVER_AUTH_TIMEOUT seconds
+        def disconnect():
+            if not self.connected:
+                return
+            if not self.authenticated:
+                self.transport.loseConnection()
+
+        reactor.callLater(configuration[NEWS_SERVER_AUTH_TIMEOUT], disconnect)
+
+    def connectionLost(self, reason):
+        self.connected = False
+        self.factory.unregister_connection(self)
+
+    def lineReceived(self, line):
+        log.msg('%s -  %s' % (self.account or 'unauthenticated', line))
+        try:
+            command, args = line.split(': ', 1)
+        except ValueError:
+            log.err('Invalid syntax, line must be of the format COMMAND: COMMAND_DATA')
+            return
+        implementation = self.commands.get(command)
+        if not implementation:
+            log.err('Received unknown command: %s' % line)
+            return
+        implementation(self, args)
+
+    def _authenticate(self, args):
+        # Parse arguments
+        username, password_in_base64 = args.strip().split(' ')
+
+        # Validate authentication parameters
+        def success():
+            self.authenticated = True
+            self.sendLine('AUTH: OK')
+
+        def failure():
+            self.sendLine('AUTH: ERROR')
+            self.transport.loseConnection()
+
+        self.factory.authenticate(username, password_in_base64, success, failure)
+
+    def is_authenticated(self, method):
+        if not self.authenticated:
+            log.err('Received unauthenticated request for %s' % method)
+            self.transport.loseConnection()
+            return False
+        return True
+
+    def _set_info(self, args):
+        if not self.is_authenticated('set_info'):
+            return
+        info, data = args.strip().split(' ', 1)
+        if info == 'APP':
+            self.app = data
+            self.factory.register_app_connection(self.app, self)
+        elif info == 'ACCOUNT':
+            self.account = data
+        elif info == 'FRIENDS':
+            self.friends = json.loads(data)
+            for friend in self.friends:
+                self.factory.register_friend_connection(friend, self)
+        else:
+            log.err('Unknown information set: %s' % info)
+
+    def _news_read(self, args):
+        if not self.is_authenticated('news_read'):
+            return
+        news_id = int(args)
+        self.factory.read_news(self.app, news_id)
+        self.sendLine('ACK NEWS READ: {}'.format(news_id))
+
+    def _news_stats_read(self, args):
+        """
+        Returns the stats of NewsItems
+        Args:
+            args (unicode:
+        """
+        if not self.is_authenticated('news_stats_read'):
+            return
+
+        stats = self.factory.news_stats_read((long(news_id) for news_id in args.split(' ')))
+        self.sendLine('NEWS STATS READ: {}'.format(' '.join((str(stat) for stat in stats))))
+
+    def _news_roger(self, args):
+        if not self.is_authenticated('news_roger'):
+            return
+        news_id = args.strip()
+        try:
+            int(news_id)
+        except ValueError:
+            log.err('Invalid news_id %s' % news_id)
+        self.factory.news_roger(news_id, self.account)
+
+    commands['AUTH'] = _authenticate
+    commands['SET INFO'] = _set_info
+    commands['NEWS READ'] = _news_read
+    commands['NEWS STATS READ'] = _news_stats_read
+    commands['NEWS ROGER'] = _news_roger
+
+
+class NewsFactory(Factory):
+    protocol = NewsProtocol
+
+    def __init__(self, http_agent):
+        self.http_agent = http_agent
+        self._authenticated_users = set()
+        self._news = {}  # contains NewsInfo objects
+        self._news_read_updates = set()
+        self._connections_per_app = defaultdict(set)  # index app
+        self._connections_per_friend = defaultdict(set)  # index friend
+        reactor.callLater(configuration[NEWS_SERVER_READ_UPDATES_TIMEOUT], self._send_news_read_updates)
+        reactor.callLater(configuration[NEWS_SERVER_SAVE_STATS_TIMEOUT], self._save_stats_to_server)
+        reactor.callLater(configuration[NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT], self._news_retention)
+
+    def authenticate(self, username, password, success, failure):
+        """
+        Check authentication against the server
+        Args:
+            username (unicode): base64 encoded email
+            password (unicode): base64 encoded password
+            success (function)
+            failure (function)
+        """
+
+        def got_response(response):
+            status_code = response.code
+            if status_code == 200:
+                self._authenticated_users.add(username_password_hash)
+                success()
+            else:
+                failure()
+
+        def connection_failed(_):
+            log.err(_)
+            failure()
+
+        # Calculate hash for authentication caching
+        username_password_hasher = hashlib.sha256()
+        username_password_hasher.update(username)
+        username_password_hasher.update(password)
+        username_password_hash = username_password_hasher.digest()
+
+        # Check authentication against the cache
+        if username_password_hash in self._authenticated_users:
+            success()
+            return
+
+        headers = {
+            'X-MCTracker-User': [username],
+            'X-MCTracker-Pass': [password]
+        }
+        auth_url = configuration[HTTP_BASE_URL] + configuration[HTTP_AUTH_PATH]
+        log.msg('auth url ' + auth_url)
+        d = self.http_agent.request('POST', auth_url, Headers(headers))
+        d.addCallback(got_response)
+        d.addErrback(connection_failed)
+        success()
+
+    def register_app_connection(self, app, connection):
+        self._connections_per_app[app].add(connection)
+
+    def register_friend_connection(self, friend, connection):
+        self._connections_per_friend[friend].add(connection)
+
+    def unregister_connection(self, connection):
+        if connection.app:
+            self._connections_per_app[connection.app].discard(connection)
+        for friend in connection.friends:
+            self._connections_per_friend[friend].discard(connection)
+
+    def _send_news_read_updates(self):
+        reactor.callLater(configuration[NEWS_SERVER_READ_UPDATES_TIMEOUT], self._send_news_read_updates)
+        app_updates = defaultdict(list)
+        for news_id in self._news_read_updates:
+            def _add_app_updates():
+                news_info = self._news.get(news_id)
+                app_updates[app].append((news_id, news_info.read_count))
+
+            news_info = self._news.get(news_id)
+            if news_info:
+                for app in news_info.app_ids:
+                    app_updates[app].append((news_id, news_info.read_count))
+        for app, updates in app_updates.iteritems():
+            with closing(StringIO()) as buf:
+                buf.write('NEWS READ UPDATE: ')
+                for news_id, read_count in updates:
+                    buf.write(str(news_id))
+                    buf.write(' ')
+                    buf.write(str(read_count))
+                    buf.write(' ')
+                update = buf.getvalue()
+            for connection in self._connections_per_app[app]:
+                connection.sendLine(update)
+        self._news_read_updates.clear()
+
+    def _news_retention(self):
+        reactor.callLater(configuration[NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT], self._news_retention)
+        max_cache_size = configuration[NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE]
+        if len(self._news) <= max_cache_size:
+            return
+        news = list(self._news.values())
+        news.sort(key=lambda news_info: news_info.timestamp)
+        for news_info in news[:len(self._news) - max_cache_size]:
+            del self._news[news_info.news_id]
+
+    def _ask_server_for_stats(self, news_ids):
+        """
+        Gets the statistics for news items from the server and adds them to the local cache.
+        Args:
+            news_ids (list of long)
+            callback (function):
+        """
+
+        def news_response(response):
+            log.msg(response)
+            if response.code != 200:
+                news_received_fail(response)
+            else:
+                def process_body(response_content):
+                    news_stats = json.loads(response_content)
+                    log.msg(news_stats)
+                    if not news_stats:
+                        log.err('Could not find news stats with ids %s' % news_ids)
+                    else:
+                        for stat in news_stats:
+                            self.add_news_stats(stat['news_id'], stat['app_ids'], stat['read_count'])
+
+                finished = Deferred()
+                response.deliverBody(ReceiverProtocol(finished))
+                finished.addBoth(process_body)
+
+        def news_received_fail(response):
+            log.err('Failed to receive news')
+            log.err(response)
+
+        news_read_url = '%s%s?news_ids=%s' % (
+            BASE_URL, configuration[HTTP_NEWS_PATH], ','.join(str(i) for i in news_ids))
+        d = self.http_agent.request('GET', news_read_url, Headers({}))
+        d.addCallback(news_response)
+        d.addErrback(news_received_fail)
+
+    def _save_stats_to_server(self):
+        """
+        Saves the statistics of local news items to the rogerthat server
+        """
+        log.msg('Saving statistics to server')
+
+        def success(response):
+            if response.code != 200:
+                log.err('Failed to save news stats, got status %d. Retrying in 10 seconds.' % response.code)
+                reactor.callLater(10, self._save_stats_to_server)
+            else:
+                reactor.callLater(configuration[NEWS_SERVER_SAVE_STATS_TIMEOUT], self._save_stats_to_server)
+
+        def fail(response):
+            log.err('Failed to launch request to save news stats. retrying in 10 seconds...')
+            log.err(response)
+            reactor.callLater(10, self._save_stats_to_server)
+
+        news_read_url = BASE_URL + configuration[HTTP_NEWS_PATH]
+        headers = {
+            'X-secret': [configuration[APP_ENGINE_SECRET]]
+        }
+        data = []
+        for stats in self._news.values():
+            data.append({
+                'read_count': stats.read_count,
+                'news_id': stats.news_id
+            })
+        d = self.http_agent.request('POST', news_read_url, Headers(headers), StringProducer(json.dumps(data)))
+        d.addCallback(success)
+        d.addErrback(fail)
+
+    def add_news_stats(self, news_id, app_ids, read_count):
+        """
+        Args:
+            news_id (long)
+            app_ids (list of unicode)
+            read_count (long)
+        """
+        log.msg(news_id)
+        log.msg(app_ids)
+        log.msg(read_count)
+        self._news[news_id] = NewsInfo(set(app_ids), read_count + 1, time.time(), news_id)
+
+    def read_news(self, app, news_id):
+        self._news_read_updates.add(news_id)
+        if news_id in self._news:
+            news_info = self._news[news_id]
+            news_info.app_ids.add(app)
+            news_info.read_count += 1
+        else:
+            self._ask_server_for_stats([news_id])
+
+    def news_stats_read(self, news_ids):
+        """
+        Returns the statistics of a news item. When not found (yet), returns -1. Real value will be returned in
+         the _send_news_read_updates function that gets executed every x seconds.
+         Structure: news_id read_count news_id read_count
+        Args:
+            news_ids (list of long):
+        Returns:
+            list of News
+        """
+        stats = []
+        for news_id in news_ids:
+            stats.append(news_id)
+            if news_id in self._news:
+                stats.append(self._news[news_id].read_count)
+            else:
+                stats.append(-1)
+                self._ask_server_for_stats([news_id])
+        return stats
+
+    def news_roger(self, news_id, friend):
+        line = 'NEWS ROGER UPDATE: %s %s' % (news_id, friend)
+        for connection in self._connections_per_friend[friend]:
+            connection.sendLine(line)
+
+    def news_updated(self, news_item):
+        log.msg('News updated: %s' % news_item)
+        news_id = news_item['id']
+        if news_id not in self._news:
+            self._news[news_id] = NewsInfo(app_ids=set(news_item['app_ids']),
+                                           read_count=0,
+                                           timestamp=time.time(),
+                                           news_id=news_id)
+        else:
+            self._news[news_id].app_ids = news_item['app_ids']
+        line = 'NEWS PUSH: %s' % json.dumps(news_item)
+
+        for app_id in news_item['app_ids']:
+            for connection in self._connections_per_app[app_id]:
+                connection.sendLine(line)

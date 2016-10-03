@@ -7,3 +7,5 @@
 .pydevproject
 .settings
 twistd.pid
+.idea
+kick.yaml

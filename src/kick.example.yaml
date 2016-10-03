@@ -1,0 +1,80 @@
+# Defines if the communication between the kickserver and the appengine cloud is encrypted
+gae-transport-encrypted: true
+
+# Defines if Apple Push should be enabled
+apns-enabled: true
+
+# Encryption and authentication secret used to secure connections between the kick server and app engine
+appengine-secret: leeg
+
+# Http service port on which the appengine application will call the webservices available in the kick server
+# This value can be overriden by the environment variable WEBSERVICE_PORT 
+webservice-port: 8080
+
+# Xmpp service name on which the kick and callback component services should be bound.
+# eg: rogerth.at ==> kick.rogerth.at, callback.rogerth.at
+xmpp-service-name: rogerth.at
+
+# Defines how fast the kick server should retry connecting to the jabber server after it got reconnected
+xmpp-reconnect-interval: 2
+
+# Defines the amount of seconds to wait before reconnecting to the apple push servers after getting disconnected
+apple-push-reconnect-interval: 10
+# Defines the polling frequency for the apple push feedback service
+apple-push-feedback-poll-interval: 600
+
+# Kick component service details
+kick-service:
+  password: echo_haha
+  address: tcp:localhost:5348
+
+# Callback component service details  
+callback-service:
+  password: echo_haha
+  address: tcp:localhost:5347
+
+# Base url of app engine.
+http-base-url: https://mobicagecloudhr.appspot.com
+
+# Public url that is replaced with the base url to get a more direct path to the app engine
+http-replace-url: https://rogerth.at
+
+# Rpc url path appended to the base url to reach the json-rpc entry point in the app engine
+http-rpc-url-path: /json-rpc
+
+# Rpc url path appended to the base url to reach the authentication entry point in rogerthat
+http-auth-path: /auth
+
+# Rpc url to appengine to save the news statistics
+http-news-path: /rest/news/stats/read
+
+# URL that will be called on this server when a news item is added/updated
+http-news-update-callback-url: /news/updated
+
+# Url on which the kick server calls to synchronize the time difference between app engine and itself.
+http-time-server-url: https://mobicagecloudhr.appspot.com/api/1/servertime
+
+# Url on which results of callbacks coming from XMPP are forwarded to the app engine
+http-callback-url: https://mobicagecloudhr.appspot.com/api/1/callback
+
+# Url on which flow can be flagged as started. 
+http-flag-flow-started-url: https://mobicagecloudhr.appspot.com/api/1/flowstarted
+
+# Url on which the apple certificate and key for a specific app should be downloaded
+http-get-apple-push-certs: https://mobicagecloudhr.appspot.com/api/1/apple_certs
+
+# Secret with which to decrypt apple push certs and keys
+apple-cert-and-key-encryption-secret: test-1-2-3
+
+# port for realtime updates of news
+news-port: 2000
+
+news-server-auth-timeout: 30
+
+news-server-read-updates-timeout: 1
+
+news-server-news-retention-job-timeout: 60
+
+news-server-news-retention-cache-size: 42
+
+news-server-save-stats-timeout: 300
