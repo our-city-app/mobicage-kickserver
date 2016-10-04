@@ -42,7 +42,17 @@ from configuration import configuration, NEWS_SERVER_AUTH_TIMEOUT, NEWS_SERVER_R
 BASE_URL = configuration[HTTP_BASE_URL]
 
 
-class NewsProtocol(LineOnlyReceiver):
+class Responses(object):
+    AUTH_OK = 'AUTH: OK'
+    AUTH_ERROR = 'AUTH: ERROR'
+    ACK_NEWS_READ = 'ACK NEWS READ: %s'
+    NEWS_STATS_READ = 'NEWS STATS READ: %s'
+    NEWS_READ_UPDATE = 'NEWS READ UPDATE: '
+    NEWS_ROGER_UPDATE = 'NEWS ROGER UPDATE: %s %s'
+    NEWS_PUSH = 'NEWS PUSH: %s'
+
+
+class NewsProtocol(object, LineOnlyReceiver):
     commands = {}
     log.msg('initializing protocol')
 
@@ -62,9 +72,14 @@ class NewsProtocol(LineOnlyReceiver):
             if not self.connected:
                 return
             if not self.authenticated:
+                log.msg('Disconnecting user, authentication timeout')
                 self.transport.loseConnection()
 
         reactor.callLater(configuration[NEWS_SERVER_AUTH_TIMEOUT], disconnect)
+
+    def sendLine(self, line):
+        log.msg('Sending line: %s' % line)
+        super(NewsProtocol, self).sendLine(line)
 
     def connectionLost(self, reason):
         self.connected = False
@@ -90,10 +105,10 @@ class NewsProtocol(LineOnlyReceiver):
         # Validate authentication parameters
         def success():
             self.authenticated = True
-            self.sendLine('AUTH: OK')
+            self.sendLine(Responses.AUTH_OK)
 
         def failure():
-            self.sendLine('AUTH: ERROR')
+            self.sendLine(Responses.AUTH_ERROR)
             self.transport.loseConnection()
 
         self.factory.authenticate(username, password_in_base64, success, failure)
@@ -126,7 +141,7 @@ class NewsProtocol(LineOnlyReceiver):
             return
         news_id = int(args)
         self.factory.read_news(self.app, news_id)
-        self.sendLine('ACK NEWS READ: {}'.format(news_id))
+        self.sendLine(Responses.ACK_NEWS_READ % news_id)
 
     def _news_stats_read(self, args):
         """
@@ -138,7 +153,7 @@ class NewsProtocol(LineOnlyReceiver):
             return
 
         stats = self.factory.news_stats_read((long(news_id) for news_id in args.split(' ')))
-        self.sendLine('NEWS STATS READ: {}'.format(' '.join((str(stat) for stat in stats))))
+        self.sendLine(Responses.NEWS_STATS_READ % ' '.join((str(stat) for stat in stats)))
 
     def _news_roger(self, args):
         if not self.is_authenticated('news_roger'):
@@ -209,14 +224,17 @@ class NewsFactory(Factory):
             'X-MCTracker-Pass': [password]
         }
         auth_url = configuration[HTTP_BASE_URL] + configuration[HTTP_AUTH_PATH]
-        log.msg('auth url ' + auth_url)
         d = self.http_agent.request('POST', auth_url, Headers(headers))
         d.addCallback(got_response)
         d.addErrback(connection_failed)
-        success()
+
+    def log_current_connections(self):
+        log.msg('Currently connected users: %d' % sum(
+            [len(self._connections_per_app[app_id]) for app_id in self._connections_per_app]))
 
     def register_app_connection(self, app, connection):
         self._connections_per_app[app].add(connection)
+        self.log_current_connections()
 
     def register_friend_connection(self, friend, connection):
         self._connections_per_friend[friend].add(connection)
@@ -226,6 +244,7 @@ class NewsFactory(Factory):
             self._connections_per_app[connection.app].discard(connection)
         for friend in connection.friends:
             self._connections_per_friend[friend].discard(connection)
+        self.log_current_connections()
 
     def _send_news_read_updates(self):
         reactor.callLater(configuration[NEWS_SERVER_READ_UPDATES_TIMEOUT], self._send_news_read_updates)
@@ -241,7 +260,7 @@ class NewsFactory(Factory):
                     app_updates[app].append((news_id, news_info.read_count))
         for app, updates in app_updates.iteritems():
             with closing(StringIO()) as buf:
-                buf.write('NEWS READ UPDATE: ')
+                buf.write(Responses.NEWS_READ_UPDATE)
                 for news_id, read_count in updates:
                     buf.write(str(news_id))
                     buf.write(' ')
@@ -271,13 +290,12 @@ class NewsFactory(Factory):
         """
 
         def news_response(response):
-            log.msg(response)
             if response.code != 200:
                 news_received_fail(response)
             else:
                 def process_body(response_content):
                     news_stats = json.loads(response_content)
-                    log.msg(news_stats)
+                    log.msg('News stats from server: %s' % news_stats)
                     if not news_stats:
                         log.err('Could not find news stats with ids %s' % news_ids)
                     else:
@@ -337,9 +355,6 @@ class NewsFactory(Factory):
             app_ids (list of unicode)
             read_count (long)
         """
-        log.msg(news_id)
-        log.msg(app_ids)
-        log.msg(read_count)
         self._news[news_id] = NewsInfo(set(app_ids), read_count + 1, time.time(), news_id)
 
     def read_news(self, app, news_id):
@@ -372,7 +387,7 @@ class NewsFactory(Factory):
         return stats
 
     def news_roger(self, news_id, friend):
-        line = 'NEWS ROGER UPDATE: %s %s' % (news_id, friend)
+        line = Responses.NEWS_ROGER_UPDATE % (news_id, friend)
         for connection in self._connections_per_friend[friend]:
             connection.sendLine(line)
 
@@ -386,7 +401,7 @@ class NewsFactory(Factory):
                                            news_id=news_id)
         else:
             self._news[news_id].app_ids = news_item['app_ids']
-        line = 'NEWS PUSH: %s' % json.dumps(news_item)
+        line = Responses.NEWS_PUSH % json.dumps(news_item)
 
         for app_id in news_item['app_ids']:
             for connection in self._connections_per_app[app_id]:
