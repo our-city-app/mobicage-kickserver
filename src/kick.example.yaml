@@ -73,8 +73,8 @@ news-server-auth-timeout: 30
 
 news-server-read-updates-timeout: 1
 
-news-server-news-retention-job-timeout: 60
+# News items older than this amount of seconds will be purged from the cache.
+# Shouldn't be too high to avoid inaccurate view count.
+news-server-news-retention-job-timeout: 3600
 
-news-server-news-retention-cache-size: 42
-
-news-server-save-stats-timeout: 300
+news-server-news-retention-cache-size: 1000

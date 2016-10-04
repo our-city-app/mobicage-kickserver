@@ -46,7 +46,6 @@ NEWS_PORT = 'news-port'
 NEWS_SERVER_SSL_CERT = 'news-server-ssl-cert'
 NEWS_SERVER_AUTH_TIMEOUT = 'news-server-auth-timeout'
 NEWS_SERVER_READ_UPDATES_TIMEOUT = 'news-server-read-updates-timeout'
-NEWS_SERVER_SAVE_STATS_TIMEOUT = 'news-server-save-stats-timeout'
 NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT = 'news-server-news-retention-job-timeout'
 NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE = 'news-server-news-retention-cache-size'
 

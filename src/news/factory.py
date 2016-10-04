@@ -24,7 +24,7 @@ from twisted.internet.defer import Deferred
 from twisted.web.http_headers import Headers
 
 from news.models import NewsInfo
-from util import StringProducer, ReceiverProtocol
+from util import ReceiverProtocol
 
 try:
     from cStringIO import StringIO
@@ -37,7 +37,7 @@ from twisted.internet import reactor
 from twisted.python import log
 from configuration import configuration, NEWS_SERVER_AUTH_TIMEOUT, NEWS_SERVER_READ_UPDATES_TIMEOUT, \
     NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT, NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE, HTTP_AUTH_PATH, HTTP_BASE_URL, \
-    HTTP_NEWS_PATH, NEWS_SERVER_SAVE_STATS_TIMEOUT, APP_ENGINE_SECRET
+    HTTP_NEWS_PATH
 
 BASE_URL = configuration[HTTP_BASE_URL]
 
@@ -183,7 +183,6 @@ class NewsFactory(Factory):
         self._connections_per_app = defaultdict(set)  # index app
         self._connections_per_friend = defaultdict(set)  # index friend
         reactor.callLater(configuration[NEWS_SERVER_READ_UPDATES_TIMEOUT], self._send_news_read_updates)
-        reactor.callLater(configuration[NEWS_SERVER_SAVE_STATS_TIMEOUT], self._save_stats_to_server)
         reactor.callLater(configuration[NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT], self._news_retention)
 
     def authenticate(self, username, password, success, failure):
@@ -250,10 +249,6 @@ class NewsFactory(Factory):
         reactor.callLater(configuration[NEWS_SERVER_READ_UPDATES_TIMEOUT], self._send_news_read_updates)
         app_updates = defaultdict(list)
         for news_id in self._news_read_updates:
-            def _add_app_updates():
-                news_info = self._news.get(news_id)
-                app_updates[app].append((news_id, news_info.read_count))
-
             news_info = self._news.get(news_id)
             if news_info:
                 for app in news_info.app_ids:
@@ -315,38 +310,6 @@ class NewsFactory(Factory):
         d = self.http_agent.request('GET', news_read_url, Headers({}))
         d.addCallback(news_response)
         d.addErrback(news_received_fail)
-
-    def _save_stats_to_server(self):
-        """
-        Saves the statistics of local news items to the rogerthat server
-        """
-        log.msg('Saving statistics to server')
-
-        def success(response):
-            if response.code != 200:
-                log.err('Failed to save news stats, got status %d. Retrying in 10 seconds.' % response.code)
-                reactor.callLater(10, self._save_stats_to_server)
-            else:
-                reactor.callLater(configuration[NEWS_SERVER_SAVE_STATS_TIMEOUT], self._save_stats_to_server)
-
-        def fail(response):
-            log.err('Failed to launch request to save news stats. retrying in 10 seconds...')
-            log.err(response)
-            reactor.callLater(10, self._save_stats_to_server)
-
-        news_read_url = BASE_URL + configuration[HTTP_NEWS_PATH]
-        headers = {
-            'X-secret': [configuration[APP_ENGINE_SECRET]]
-        }
-        data = []
-        for stats in self._news.values():
-            data.append({
-                'read_count': stats.read_count,
-                'news_id': stats.news_id
-            })
-        d = self.http_agent.request('POST', news_read_url, Headers(headers), StringProducer(json.dumps(data)))
-        d.addCallback(success)
-        d.addErrback(fail)
 
     def add_news_stats(self, news_id, app_ids, read_count):
         """
