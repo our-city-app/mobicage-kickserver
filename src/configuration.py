@@ -19,7 +19,7 @@ import os
 
 import yaml
 
-
+DEBUG_ON = 'debug'
 GAE_TRANSPORT_ENCRYPTED = 'gae-transport-encrypted'
 APNS_ENABLED = 'apns-enabled'
 APP_ENGINE_SECRET = 'appengine-secret'

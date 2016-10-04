@@ -37,10 +37,19 @@ from twisted.internet import reactor
 from twisted.python import log
 from configuration import configuration, NEWS_SERVER_AUTH_TIMEOUT, NEWS_SERVER_READ_UPDATES_TIMEOUT, \
     NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT, NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE, HTTP_AUTH_PATH, HTTP_BASE_URL, \
-    HTTP_NEWS_PATH
+    HTTP_NEWS_PATH, DEBUG_ON
 
 BASE_URL = configuration[HTTP_BASE_URL]
+DEBUG = configuration[DEBUG_ON]
 
+
+class Commands(object):
+    AUTH = 'AUTH'
+    SET_INFO = 'SET INFO'
+    NEWS_READ = 'NEWS READ'
+    NEWS_STATS_READ = 'NEWS STATS READ'
+    NEWS_ROGER = 'NEWS ROGER'
+    PING = 'PING'
 
 class Responses(object):
     AUTH_OK = 'AUTH: OK'
@@ -50,6 +59,7 @@ class Responses(object):
     NEWS_READ_UPDATE = 'NEWS READ UPDATE: '
     NEWS_ROGER_UPDATE = 'NEWS ROGER UPDATE: %s %s'
     NEWS_PUSH = 'NEWS PUSH: %s'
+    PONG = 'PONG'
 
 
 class NewsProtocol(object, LineOnlyReceiver):
@@ -78,7 +88,8 @@ class NewsProtocol(object, LineOnlyReceiver):
         reactor.callLater(configuration[NEWS_SERVER_AUTH_TIMEOUT], disconnect)
 
     def sendLine(self, line):
-        log.msg('Sending line: %s' % line)
+        if DEBUG:
+            log.msg('Sending line: %s' % line)
         super(NewsProtocol, self).sendLine(line)
 
     def connectionLost(self, reason):
@@ -86,7 +97,11 @@ class NewsProtocol(object, LineOnlyReceiver):
         self.factory.unregister_connection(self)
 
     def lineReceived(self, line):
-        log.msg('%s -  %s' % (self.account or 'unauthenticated', line))
+        if DEBUG:
+            log.msg('%s -  %s' % (self.account or 'unauthenticated', line))
+        if line == Commands.PING:
+            self._ping_pong()
+            return
         try:
             command, args = line.split(': ', 1)
         except ValueError:
@@ -165,11 +180,15 @@ class NewsProtocol(object, LineOnlyReceiver):
             log.err('Invalid news_id %s' % news_id)
         self.factory.news_roger(news_id, self.account)
 
-    commands['AUTH'] = _authenticate
-    commands['SET INFO'] = _set_info
-    commands['NEWS READ'] = _news_read
-    commands['NEWS STATS READ'] = _news_stats_read
-    commands['NEWS ROGER'] = _news_roger
+    def _ping_pong(self):
+        self.sendLine(Responses.PONG)
+
+    commands[Commands.AUTH] = _authenticate
+    commands[Commands.SET_INFO] = _set_info
+    commands[Commands.NEWS_READ] = _news_read
+    commands[Commands.NEWS_STATS_READ] = _news_stats_read
+    commands[Commands.NEWS_ROGER] = _news_roger
+    commands[Commands.PING] = _ping_pong
 
 
 class NewsFactory(Factory):
@@ -355,7 +374,8 @@ class NewsFactory(Factory):
             connection.sendLine(line)
 
     def news_updated(self, news_item):
-        log.msg('News updated: %s' % news_item)
+        if DEBUG:
+            log.msg('News updated: %s' % news_item)
         news_id = news_item['id']
         if news_id not in self._news:
             self._news[news_id] = NewsInfo(app_ids=set(news_item['app_ids']),

@@ -1,4 +1,7 @@
-# Defines if the communication between the kickserver and the appengine cloud is encrypted
+# Disables some logging for enhanced performance
+debug: false
+# Defines if the communi
+cation between the kickserver and the appengine cloud is encrypted
 gae-transport-encrypted: true
 
 # Defines if Apple Push should be enabled
