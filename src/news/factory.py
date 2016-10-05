@@ -57,6 +57,7 @@ class Responses(object):
     ACK_NEWS_READ = 'ACK NEWS READ: %s'
     NEWS_STATS_READ = 'NEWS STATS READ: %s'
     NEWS_READ_UPDATE = 'NEWS READ UPDATE: '
+    ACK_NEWS_ROGER = 'ACK NEWS ROGER: %s'
     NEWS_ROGER_UPDATE = 'NEWS ROGER UPDATE: %s %s'
     NEWS_PUSH = 'NEWS PUSH: %s'
     PONG = 'PONG'
@@ -179,6 +180,7 @@ class NewsProtocol(object, LineOnlyReceiver):
         except ValueError:
             log.err('Invalid news_id %s' % news_id)
         self.factory.news_roger(news_id, self.account)
+        self.sendLine(Responses.ACK_NEWS_ROGER % news_id)
 
     def _ping_pong(self):
         self.sendLine(Responses.PONG)
@@ -384,8 +386,21 @@ class NewsFactory(Factory):
                                            news_id=news_id)
         else:
             self._news[news_id].app_ids = news_item['app_ids']
-        line = Responses.NEWS_PUSH % json.dumps(news_item)
+        news_item['sort_timestamp'] = news_item['sticky_until'] if news_item['sticky_until'] else news_item['timestamp']
 
         for app_id in news_item['app_ids']:
             for connection in self._connections_per_app[app_id]:
+                news_item['sort_priority'] = sort_priority(news_item, connection.friends)
+                line = Responses.NEWS_PUSH % json.dumps(news_item)
                 connection.sendLine(line)
+
+
+def sort_priority(news_item, friends):
+    if news_item['sticky']:
+        return 10
+    if news_item['users_that_rogered'] and any(
+                    user_that_rogered in friends for user_that_rogered in news_item['users_that_rogered']):
+        return 20
+    if news_item['sender'] in friends:
+        return 30
+    return 40
