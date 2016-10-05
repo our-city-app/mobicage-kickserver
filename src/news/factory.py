@@ -76,7 +76,6 @@ class NewsProtocol(object, LineOnlyReceiver):
 
     def connectionMade(self):
         self.connected = True
-        self.sendLine('CONNECTED')
 
         # Close unauthenticated connections after NEWS_SERVER_AUTH_TIMEOUT seconds
         def disconnect():
