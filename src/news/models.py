@@ -14,10 +14,10 @@
 # limitations under the License.
 #
 # @@license_version:1.1@@
-
+import time
 
 class NewsInfo(object):
-    def __init__(self, app_ids=None, read_count=0, timestamp=0, news_id=None):
+    def __init__(self, app_ids=None, read_count=0, news_id=None):
         """
         Args:
             app_ids (set of unicode)
@@ -29,5 +29,5 @@ class NewsInfo(object):
             app_ids = set()
         self.app_ids = app_ids
         self.read_count = read_count
-        self.timestamp = timestamp
+        self.timestamp = time.time()
         self.news_id = news_id
