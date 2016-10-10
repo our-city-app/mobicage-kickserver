@@ -31,11 +31,8 @@ from callbackec import StartFlowResource
 from callbackec import UnRegisterResource
 from configuration import APP_ENGINE_SECRET, XMPP_SERVICE_NAME, KICK_SERVICE, PASSWORD, ADDRESS, \
     XMPP_RECONNECT_INTERVAL, APNS_ENABLED, CALLBACK_SERVICE, WEBSERVICE_PORT, configuration
-from configuration import NEWS_PORT
 from kickec import KickResource
 from mccommon import LogService
-from news.callbacks import NewsUpdatedCallback
-from news.factory import NewsFactory
 from util import ServerTime, HighLoadTCPServer
 
 # Let's get started
@@ -82,13 +79,6 @@ root.putChild('register', RegisterResource(configuration[APP_ENGINE_SECRET], ser
 root.putChild('kick', KickResource(kickService, configuration[APP_ENGINE_SECRET], serverTime))
 root.putChild('start_flow', StartFlowResource(configuration[APP_ENGINE_SECRET], serverTime, agent))
 root.putChild('ip2country', IpToCountryResource(configuration[APP_ENGINE_SECRET], serverTime))
-
-news_factory = NewsFactory(agent)
-news_service_port = int(os.environ.get('NEWS_PORT', configuration[NEWS_PORT]))
-news_service = HighLoadTCPServer(news_service_port, news_factory, request_queue_size=100)
-news_service.setServiceParent(application)
-
-root.putChild('news_updated', NewsUpdatedCallback(configuration[APP_ENGINE_SECRET], serverTime, agent, news_factory))
 
 webservice_port = int(os.environ.get('WEBSERVICE_PORT', configuration[WEBSERVICE_PORT]))
 webservice = HighLoadTCPServer(webservice_port, server.Site(root), request_queue_size=100)
