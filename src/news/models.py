@@ -37,15 +37,22 @@ class NewsInfo(object):
         self.users_that_rogered = users_that_rogered
 
     @classmethod
-    def serialize(cls, news_info):
+    def serialize(cls, news_info, friends, own_email):
         """
         Args:
             news_info (NewsInfo)
+            friends (list of unicode): list of the user who asks for the stats' friends
+            own_email (unicode)
 
         Returns:
             dict
         """
+        friends.append(own_email)
+        users_that_rogered = []
+        for friend in news_info.users_that_rogered:
+            if friend in friends:
+                users_that_rogered.append(friend)
         return {
             'reach': news_info.read_count,
-            'users_that_rogered': list(news_info.users_that_rogered)
+            'users_that_rogered': users_that_rogered
         }
