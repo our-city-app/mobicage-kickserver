@@ -47,10 +47,11 @@ class NewsInfo(object):
         Returns:
             dict
         """
-        friends.append(own_email)
+        _friends_copy = list(friends)
+        _friends_copy.append(own_email)
         users_that_rogered = []
         for friend in news_info.users_that_rogered:
-            if friend in friends:
+            if friend in _friends_copy:
                 users_that_rogered.append(friend)
         return {
             'reach': news_info.read_count,
