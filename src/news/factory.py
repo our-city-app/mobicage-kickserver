@@ -47,15 +47,16 @@ class Commands(object):
     AUTH = 'AUTH'
     SET_INFO = 'SET INFO'
     NEWS_READ = 'NEWS READ'
-    NEWS_STATS_READ = 'NEWS STATS READ'
+    NEWS_STATS = 'NEWS STATS'
     NEWS_ROGER = 'NEWS ROGER'
     PING = 'PING'
+
 
 class Responses(object):
     AUTH_OK = 'AUTH: OK'
     AUTH_ERROR = 'AUTH: ERROR'
     ACK_NEWS_READ = 'ACK NEWS READ: %s'
-    NEWS_STATS_READ = 'NEWS STATS READ: %s'
+    NEWS_STATS = 'NEWS STATS: %s'
     NEWS_READ_UPDATE = 'NEWS READ UPDATE: '
     ACK_NEWS_ROGER = 'ACK NEWS ROGER: %s'
     NEWS_ROGER_UPDATE = 'NEWS ROGER UPDATE: %s %s'
@@ -154,21 +155,33 @@ class NewsProtocol(object, LineOnlyReceiver):
     def _news_read(self, args):
         if not self.is_authenticated('news_read'):
             return
-        news_id = int(args)
+        try:
+            news_id = long(args)
+        except ValueError:
+            log.err('Invalid news id: %s' % args)
+            return
         self.factory.read_news(self.app, news_id)
         self.sendLine(Responses.ACK_NEWS_READ % news_id)
 
-    def _news_stats_read(self, args):
+    def _news_stats(self, args):
         """
         Returns the stats of NewsItems
         Args:
-            args (unicode:
+            args (unicode):  space-separated list of news ids
         """
-        if not self.is_authenticated('news_stats_read'):
-            return
 
-        stats = self.factory.news_stats_read(self.app, (long(news_id) for news_id in args.split(' ')))
-        self.sendLine(Responses.NEWS_STATS_READ % ' '.join((str(stat) for stat in stats)))
+        def callback(stats):
+            """
+            Returns:
+                stats: string of stats that weren't found in the memory cache and were fetched asynchronously
+            """
+            self.sendLine(Responses.NEWS_STATS % stats)
+
+        if not self.is_authenticated('news_stats'):
+            return
+        news_ids = (long(news_id) for news_id in args.split(' '))
+        stats = self.factory.news_stats(news_ids, callback)
+        self.sendLine(Responses.NEWS_STATS % stats)
 
     def _news_roger(self, args):
         if not self.is_authenticated('news_roger'):
@@ -187,12 +200,12 @@ class NewsProtocol(object, LineOnlyReceiver):
     commands[Commands.AUTH] = _authenticate
     commands[Commands.SET_INFO] = _set_info
     commands[Commands.NEWS_READ] = _news_read
-    commands[Commands.NEWS_STATS_READ] = _news_stats_read
+    commands[Commands.NEWS_STATS] = _news_stats
     commands[Commands.NEWS_ROGER] = _news_roger
     commands[Commands.PING] = _ping_pong
 
 
-class NewsFactory(Factory):
+class NewsFactory(object, Factory):
     protocol = NewsProtocol
 
     def __init__(self, http_agent):
@@ -294,22 +307,26 @@ class NewsFactory(Factory):
         news = list(self._news.values())
         news.sort(key=lambda news_info: news_info.timestamp)
         for news_info in news[:len(self._news) - max_cache_size]:
-            del self._news[news_info.news_id]
+            news_id = news_info.news_id
+            del self._news[news_id]
+            if news_id in self._rogered_news:
+                del self._rogered_news[news_id]
 
-    def _ask_server_for_stats(self, app, news_ids):
+    def _ask_server_for_stats(self, news_ids, callback=None):
         """
         Gets the statistics for news items from the server and adds them to the local cache.
         Args:
             news_ids (list of long)
-            callback (function):
+            callback (function)
         """
         if not news_ids:
             return
 
         for news_id in news_ids:
-            self._news[news_id] = NewsInfo(app_ids={ app },
+            self._news[news_id] = NewsInfo(app_ids=set(),
                                            read_count=0,
-                                           news_id=news_id)
+                                           news_id=news_id,
+                                           users_that_rogered=set())
 
         def news_response(response):
             if response.code != 200:
@@ -327,7 +344,12 @@ class NewsFactory(Factory):
                             news.news_id = news_id
                             news.app_ids.update(stat['app_ids'])
                             news.read_count += stat['read_count']
+                            news.users_that_rogered = set(stat['users_that_rogered'])
                             self._news_read_updates.add(news_id)
+                        if callback:
+                            stats = {news_info['news_id']: NewsInfo.serialize(self._news[news_info['news_id']]) for
+                                     news_info in news_stats}
+                            callback(stats)
 
                 finished = Deferred()
                 response.deliverBody(ReceiverProtocol(finished))
@@ -350,34 +372,41 @@ class NewsFactory(Factory):
             news_info.read_count += 1
             self._news_read_updates.add(news_id)
         else:
-            self._ask_server_for_stats(app, [news_id])
+            self._ask_server_for_stats([news_id])
 
-    def news_stats_read(self, app, news_ids):
+    def news_stats(self, news_ids, callback):
         """
-        Returns the statistics of a news item. When not found (yet), returns -1. Real value will be returned in
-         the _send_news_read_updates function that gets executed every x seconds.
+        Returns the statistics of a news item. When not found (yet), returns None. Real value will be returned in
+         the _send_news_read_updates and _send_news_rogered_updates functions that gets executed every x seconds.
          Structure: news_id read_count news_id read_count
         Args:
-            news_ids (list of long):
+            news_ids (list of long)
+            callback (function)
         Returns:
-            list of News
+            dict: key news_id, value NewsInfo
         """
-        stats = list()
-        need_server_stats = list()
+        stats = {}
+        need_server_stats = []
         for news_id in news_ids:
-            stats.append(news_id)
-            if news_id in self._news:
-                stats.append(self._news[news_id].read_count)
-            else:
-                stats.append(-1)
+            stats[news_id] = self._news.get(news_id, None)
+            if news_id not in self._news:
                 need_server_stats.append(news_id)
-        self._ask_server_for_stats(app, need_server_stats)
-        return stats
+                stats[news_id] = None
+            else:
+                stats[news_id] = NewsInfo.serialize(self._news[news_id])
+
+        self._ask_server_for_stats(need_server_stats, callback)
+        return json.dumps(stats)
 
     def news_roger(self, news_id, friend):
         line = Responses.NEWS_ROGER_UPDATE % (news_id, friend)
         for connection in self._connections_per_friend[friend]:
             connection.sendLine(line)
+        stats = self._news.get(news_id, None)
+        if stats:
+            stats.users_that_rogered.add(friend)
+        else:
+            self._ask_server_for_stats([news_id])
 
     def news_updated(self, news_item):
         if DEBUG:
