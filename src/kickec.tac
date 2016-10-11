@@ -14,22 +14,26 @@
 
 # Content of this file was based on example found at
 # http://butterfat.net/wiki/Documentation/TwistedJabberComponentExample
+import os
 
-from apns import ApplePushConnectionFactory
-from callbackec import CallbackResource, RegisterResource, UnRegisterResource, StartFlowResource, IpToCountryResource
-from kickec import KickResource
-from mccommon import LogService
 from twisted.application import service
 from twisted.internet import reactor
 from twisted.web import resource, server
 from twisted.web.client import Agent, HTTPConnectionPool
 from twisted.words.protocols.jabber import component
+
 import callbackec
 import kickec
-import os
-from util import ServerTime, HighLoadTCPServer
+from apns import ApplePushConnectionFactory
+from callbackec import IpToCountryResource, CallbackResource
+from callbackec import RegisterResource
+from callbackec import StartFlowResource
+from callbackec import UnRegisterResource
 from configuration import APP_ENGINE_SECRET, XMPP_SERVICE_NAME, KICK_SERVICE, PASSWORD, ADDRESS, \
     XMPP_RECONNECT_INTERVAL, APNS_ENABLED, CALLBACK_SERVICE, WEBSERVICE_PORT, configuration
+from kickec import KickResource
+from mccommon import LogService
+from util import ServerTime, HighLoadTCPServer
 
 # Let's get started
 application = service.Application('Rogerthat cloud servicer')
@@ -79,5 +83,3 @@ root.putChild('ip2country', IpToCountryResource(configuration[APP_ENGINE_SECRET]
 webservice_port = int(os.environ.get('WEBSERVICE_PORT', configuration[WEBSERVICE_PORT]))
 webservice = HighLoadTCPServer(webservice_port, server.Site(root), request_queue_size=100)
 webservice.setServiceParent(application)
-
-

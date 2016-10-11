@@ -19,7 +19,7 @@ import os
 
 import yaml
 
-
+DEBUG_ON = 'debug'
 GAE_TRANSPORT_ENCRYPTED = 'gae-transport-encrypted'
 APNS_ENABLED = 'apns-enabled'
 APP_ENGINE_SECRET = 'appengine-secret'
@@ -35,11 +35,20 @@ APPLE_PUSH_FEEDBACK_POLL_INTERVAL = 'apple-push-feedback-poll-interval'
 HTTP_BASE_URL = 'http-base-url'
 HTTP_REPLACE_URL = 'http-replace-url'
 HTTP_RPC_URL_PATH = 'http-rpc-url-path'
+HTTP_AUTH_PATH = 'http-auth-path'
+HTTP_NEWS_PATH = 'http-news-path'
 HTTP_SERVER_TIME_URL = 'http-time-server-url'
 HTTP_CALLBACK_URL = 'http-callback-url'
 HTTP_FLAG_FLOW_STARTED_URL = 'http-flag-flow-started-url'
 HTTP_GET_APPLE_PUSH_CERTS = 'http-get-apple-push-certs'
 APPLE_CERT_AND_KEY_ENCRYPTION_SECRET = 'apple-cert-and-key-encryption-secret'
+NEWS_PORT = 'news-port'
+NEWS_WEBSERVICE_PORT = 'news-webservice-port'
+NEWS_SERVER_SSL_CERT = 'news-server-ssl-cert'
+NEWS_SERVER_AUTH_TIMEOUT = 'news-server-auth-timeout'
+NEWS_SERVER_READ_UPDATES_TIMEOUT = 'news-server-read-updates-timeout'
+NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT = 'news-server-news-retention-job-timeout'
+NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE = 'news-server-news-retention-cache-size'
 
 # Get configuration
 configuration_file = os.environ.get('KICK_CONF', '/etc/rogerthat/kick.yaml')

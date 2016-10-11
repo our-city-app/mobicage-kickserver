@@ -1,4 +1,7 @@
-# Defines if the communication between the kickserver and the appengine cloud is encrypted
+# Disables some logging for enhanced performance
+debug: false
+# Defines if the communi
+cation between the kickserver and the appengine cloud is encrypted
 gae-transport-encrypted: true
 
 # Defines if Apple Push should be enabled
@@ -42,6 +45,15 @@ http-replace-url: https://rogerth.at
 # Rpc url path appended to the base url to reach the json-rpc entry point in the app engine
 http-rpc-url-path: /json-rpc
 
+# Rpc url path appended to the base url to reach the authentication entry point in rogerthat
+http-auth-path: /auth
+
+# Rpc url to appengine to save the news statistics
+http-news-path: /rest/news/stats/read
+
+# URL that will be called on this server when a news item is added/updated
+http-news-update-callback-url: /news/updated
+
 # Url on which the kick server calls to synchronize the time difference between app engine and itself.
 http-time-server-url: https://mobicagecloudhr.appspot.com/api/1/servertime
 
@@ -55,4 +67,19 @@ http-flag-flow-started-url: https://mobicagecloudhr.appspot.com/api/1/flowstarte
 http-get-apple-push-certs: https://mobicagecloudhr.appspot.com/api/1/apple_certs
 
 # Secret with which to decrypt apple push certs and keys
-apple-cert-and-key-encryption-secret: test-1-2-3 
+apple-cert-and-key-encryption-secret: test-1-2-3
+
+news-webservice-port: 22000
+
+# port for realtime updates of news
+news-port: 2000
+
+news-server-auth-timeout: 30
+
+news-server-read-updates-timeout: 1
+
+# News items older than this amount of seconds will be purged from the cache.
+# Shouldn't be too high to avoid inaccurate view count.
+news-server-news-retention-job-timeout: 3600
+
+news-server-news-retention-cache-size: 1000
