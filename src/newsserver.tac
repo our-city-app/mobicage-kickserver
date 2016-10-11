@@ -20,7 +20,7 @@ from twisted.internet import reactor
 from twisted.web import resource, server
 from twisted.web.client import Agent, HTTPConnectionPool
 
-from configuration import APP_ENGINE_SECRET, WEBSERVICE_PORT, configuration
+from configuration import APP_ENGINE_SECRET, configuration, NEWS_WEBSERVICE_PORT
 from configuration import NEWS_PORT
 from news.callbacks import NewsUpdatedCallback
 from news.factory import NewsFactory
@@ -42,6 +42,6 @@ news_service.setServiceParent(application)
 
 root.putChild('news_updated', NewsUpdatedCallback(configuration[APP_ENGINE_SECRET], serverTime, agent, news_factory))
 
-webservice_port = int(os.environ.get('WEBSERVICE_PORT', configuration[WEBSERVICE_PORT]))
+webservice_port = int(os.environ.get('NEWS_WEBSERVICE_PORT', configuration[NEWS_WEBSERVICE_PORT]))
 webservice = HighLoadTCPServer(webservice_port, server.Site(root), request_queue_size=100)
 webservice.setServiceParent(application)
