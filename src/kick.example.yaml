@@ -69,6 +69,10 @@ http-get-apple-push-certs: https://mobicagecloudhr.appspot.com/api/1/apple_certs
 # Secret with which to decrypt apple push certs and keys
 apple-cert-and-key-encryption-secret: test-1-2-3
 
+news-ssl-key: /etc/path_to_key
+
+news-ssl-cert: /etc/path_to_cert
+
 news-webservice-port: 22000
 
 # port for realtime updates of news

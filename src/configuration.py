@@ -49,6 +49,8 @@ NEWS_SERVER_AUTH_TIMEOUT = 'news-server-auth-timeout'
 NEWS_SERVER_READ_UPDATES_TIMEOUT = 'news-server-read-updates-timeout'
 NEWS_SERVER_NEWS_RETENTION_JOB_TIMEOUT = 'news-server-news-retention-job-timeout'
 NEWS_SERVER_NEWS_RETENTION_CACHE_SIZE = 'news-server-news-retention-cache-size'
+NEWS_SSL_KEY = 'news-ssl-key'
+NEWS_SSL_CERT = 'news-ssl-cert'
 
 # Get configuration
 configuration_file = os.environ.get('KICK_CONF', '/etc/rogerthat/kick.yaml')

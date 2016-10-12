@@ -15,19 +15,22 @@
 #
 # @@license_version:1.1@@
 
-from zope.interface import implements
-from twisted.internet.defer import succeed, Deferred
-from twisted.web.iweb import IBodyProducer, UNKNOWN_LENGTH
-from twisted.internet import protocol, reactor
-from twisted.web.http_headers import Headers
-import struct
-import hashlib
-import uuid
-from twisted.python import log
-import time
-from twisted.application import internet
-from configuration import GAE_TRANSPORT_ENCRYPTED, HTTP_SERVER_TIME_URL, configuration
 import base64
+import hashlib
+import struct
+import time
+import uuid
+from zope.interface import implements
+
+from twisted.application import internet
+from twisted.internet import protocol, reactor
+from twisted.internet.defer import succeed, Deferred
+from twisted.python import log
+from twisted.web.http_headers import Headers
+from twisted.web.iweb import IBodyProducer, UNKNOWN_LENGTH
+
+from configuration import GAE_TRANSPORT_ENCRYPTED, HTTP_SERVER_TIME_URL, configuration
+
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -214,3 +217,9 @@ class HighLoadTCPServer(internet.TCPServer):  # @UndefinedVariable
     def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True, request_queue_size=5):
         self.request_queue_size = request_queue_size
         internet.TCPServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate)  # @UndefinedVariable
+
+
+class HighLoadSSLServer(internet.SSLServer):
+    def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True, request_queue_size=5):
+        self.request_queue_size = request_queue_size
+        internet.SSLServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate)
