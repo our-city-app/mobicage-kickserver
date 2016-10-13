@@ -17,7 +17,6 @@
 
 import hashlib
 import json
-import time
 from contextlib import closing
 
 from twisted.internet.defer import Deferred
