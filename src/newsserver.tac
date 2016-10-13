@@ -42,7 +42,7 @@ news_service_port = int(os.environ.get('NEWS_PORT', configuration[NEWS_PORT]))
 if configuration[NEWS_SSL_KEY]:
     news_service = HighLoadSSLServer(news_service_port, news_factory,
                                      ssl.DefaultOpenSSLContextFactory(configuration[NEWS_SSL_KEY],
-                                                                      configuration[NEWS_SSL_CERT], SSL.TLSv1_2_METHOD),
+                                                                      configuration[NEWS_SSL_CERT], SSL.TLSv1_METHOD),
                                      request_queue_size=100)
 else:
     news_service = HighLoadTCPServer(news_service_port, news_factory, request_queue_size=100)
