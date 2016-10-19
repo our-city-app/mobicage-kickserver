@@ -254,7 +254,7 @@ class NewsFactory(object, Factory):
 
         headers = {
             'X-MCTracker-User': [username],
-            'X-MCTracker-Pass': [password]
+            'X-MCTracker-Pass': [password],
         }
         auth_url = configuration[HTTP_BASE_URL] + configuration[HTTP_AUTH_PATH]
         d = self.http_agent.request('POST', auth_url, Headers(headers))
