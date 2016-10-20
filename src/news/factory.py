@@ -117,7 +117,7 @@ class NewsProtocol(object, LineOnlyReceiver):
 
     def _authenticate(self, args):
         # Parse arguments
-        username, password_in_base64 = args.strip().split(' ')
+        username_in_base64, password_in_base64 = args.strip().split(' ')
 
         # Validate authentication parameters
         def success():
@@ -128,7 +128,7 @@ class NewsProtocol(object, LineOnlyReceiver):
             self.sendLine(Responses.AUTH_ERROR)
             self.transport.loseConnection()
 
-        self.factory.authenticate(username, password_in_base64, success, failure)
+        self.factory.authenticate(username_in_base64, password_in_base64, success, failure)
 
     def is_authenticated(self, method):
         if not self.authenticated:
