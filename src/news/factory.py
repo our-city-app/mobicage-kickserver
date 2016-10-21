@@ -430,7 +430,7 @@ class NewsFactory(object, Factory):
                                            read_count=0,
                                            news_id=news_id)
         else:
-            self._news[news_id].app_ids = news_item['app_ids']
+            self._news[news_id].app_ids = set(news_item['app_ids'])
         news_item['sort_timestamp'] = news_item['sticky_until'] if news_item['sticky_until'] else news_item['timestamp']
 
         for app_id in news_item['app_ids']:
