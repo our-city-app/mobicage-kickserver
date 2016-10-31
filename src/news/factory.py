@@ -436,6 +436,13 @@ class NewsFactory(object, Factory):
         for app_id in news_item['app_ids']:
             for connection in self._connections_per_app[app_id]:
                 news_item['sort_priority'] = sort_priority(news_item, connection.friends)
+                if news_item['type'] == 2:
+                    try:
+                        content = json.loads(news_item['qr_code_content'])
+                        content['u'] = connection.account
+                        news_item['qr_code_content'] = content
+                    except:
+                        pass
                 line = Responses.NEWS_PUSH % json.dumps(news_item)
                 connection.sendLine(line)
 
