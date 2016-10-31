@@ -1,2 +1,2 @@
 #!/bin/bash
-sudo ejabberdctl register $1 $2 $3
+sudo /usr/sbin/ejabberdctl register $1 $2 $3

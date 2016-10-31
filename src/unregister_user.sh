@@ -1,2 +1,2 @@
 #!/bin/bash
-sudo ejabberdctl unregister $1 $2 $3
+sudo /usr/sbin/ejabberdctl unregister $1 $2 $3
