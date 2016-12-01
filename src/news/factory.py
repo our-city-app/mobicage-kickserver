@@ -157,7 +157,7 @@ class NewsProtocol(object, LineOnlyReceiver):
         if not self.is_authenticated('news_read'):
             return
         try:
-            news_id = long(args)
+            news_id = long(args.strip())
         except ValueError:
             log.err('Invalid news id: %s' % args)
             return
@@ -187,11 +187,11 @@ class NewsProtocol(object, LineOnlyReceiver):
     def _news_roger(self, args):
         if not self.is_authenticated('news_roger'):
             return
-        news_id = args.strip()
         try:
-            int(news_id)
+            news_id = long(args.strip())
         except ValueError:
-            log.err('Invalid news_id %s' % news_id)
+            log.err('Invalid news_id %s' % args)
+            return
         self.factory.news_roger(news_id, self.account)
         self.sendLine(Responses.ACK_NEWS_ROGER % news_id)
 
