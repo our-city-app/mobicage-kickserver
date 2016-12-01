@@ -180,8 +180,11 @@ class NewsProtocol(object, LineOnlyReceiver):
 
         if not self.is_authenticated('news_stats'):
             return
-        news_ids = (long(news_id) for news_id in args.split(' '))
-        stats = self.factory.news_stats(news_ids, list(self.friends), self.account, callback)
+        if args:
+            news_ids = (long(news_id) for news_id in args.split(' '))
+            stats = self.factory.news_stats(news_ids, list(self.friends), self.account, callback)
+        else:
+            stats = json.dumps({})
         self.sendLine(Responses.NEWS_STATS % stats)
 
     def _news_roger(self, args):
