@@ -20,10 +20,11 @@ import hashlib
 import struct
 import time
 import uuid
+from OpenSSL import SSL
 from zope.interface import implements
 
 from twisted.application import internet
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, ssl
 from twisted.internet.defer import succeed, Deferred
 from twisted.python import log
 from twisted.web.http_headers import Headers
@@ -223,3 +224,24 @@ class HighLoadSSLServer(internet.SSLServer):
     def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True, request_queue_size=5):
         self.request_queue_size = request_queue_size
         internet.SSLServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate)
+
+
+class ChainedOpenSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
+
+    def __init__(self, privateKeyFileName, certificateChainFileName,
+                 sslmethod=SSL.SSLv23_METHOD):
+        """
+        @param privateKeyFileName: Name of a file containing a private key
+        @param certificateChainFileName: Name of a file containing a certificate chain
+        @param sslmethod: The SSL method to use
+        """
+        self.privateKeyFileName = privateKeyFileName
+        self.certificateChainFileName = certificateChainFileName
+        self.sslmethod = sslmethod
+        self.cacheContext()
+
+    def cacheContext(self):
+        ctx = SSL.Context(self.sslmethod)
+        ctx.use_certificate_chain_file(self.certificateChainFileName)
+        ctx.use_privatekey_file(self.privateKeyFileName)
+        self._context = ctx
