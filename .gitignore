@@ -9,3 +9,4 @@
 twistd.pid
 .idea
 kick.yaml
+.DS_Store
