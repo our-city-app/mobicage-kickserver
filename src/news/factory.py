@@ -15,6 +15,7 @@
 #
 # @@license_version:1.1@@
 
+import datetime
 import hashlib
 import json
 from contextlib import closing
@@ -22,6 +23,7 @@ from contextlib import closing
 from twisted.internet.defer import Deferred
 from twisted.web.http_headers import Headers
 
+from news.consts import GENDER_MALE_OR_FEMALE, GENDER_CUSTOM
 from news.models import NewsInfo
 from util import ReceiverProtocol
 
@@ -73,6 +75,7 @@ class NewsProtocol(object, LineOnlyReceiver):
         self.app = None
         self.friends = []
         self.account = None
+        self.profile = {}
 
     def connectionMade(self):
         self.connected = True
@@ -150,6 +153,8 @@ class NewsProtocol(object, LineOnlyReceiver):
             self.friends = json.loads(data)
             for friend in self.friends:
                 self.factory.register_friend_connection(friend, self)
+        elif info == 'PROFILE':
+            self.profile = json.loads(data)
         else:
             log.err('Unknown information set: %s' % info)
 
@@ -438,7 +443,7 @@ class NewsFactory(object, Factory):
 
         for app_id in news_item['app_ids']:
             for connection in self._connections_per_app[app_id]:
-                news_item['sort_priority'] = sort_priority(news_item, connection.friends)
+                news_item['sort_priority'] = sort_priority(news_item, connection.friends, connection.profile)
                 if news_item['type'] == 2:
                     try:
                         content = json.loads(news_item['qr_code_content'])
@@ -450,12 +455,66 @@ class NewsFactory(object, Factory):
                 connection.sendLine(line)
 
 
-def sort_priority(news_item, friends):
+# rogerthat-backend utils
+def calculate_age_from_date(born):
+    today = datetime.date.today()
+    try:
+        birthday = born.replace(year=today.year)
+    except ValueError:  # raised when birth date is February 29 and the current year is not a leap year
+        birthday = born.replace(year=today.year, day=born.day - 1)
+    if birthday > today:
+        return today.year - born.year - 1
+    else:
+        return today.year - born.year
+
+
+def match_target_audience(profile, news_item):
+    """Check if the given profile matches the target audience of news item.
+
+    Args:
+        profile (dict): user profile with birthdate and gender as long
+        news_item (dict): news item data
+
+    Returns:
+        bool
+    """
+    item_target_audience = news_item['target_audience']
+    if not item_target_audience:
+        return True
+
+    user_birthdate = profile.get('birthdate')
+    user_gender = profile.get('gender')
+    if user_birthdate is None or not user_gender:
+        return False
+
+    news_item_gender = item_target_audience['gender']
+    if news_item_gender not in (GENDER_MALE_OR_FEMALE, GENDER_CUSTOM):
+        if news_item_gender != user_gender:
+            return False
+
+    min_age = item_target_audience['min_age']
+    max_age = item_target_audience['max_age']
+    # get a date object from timestamp to calculate the age
+    user_birthdate = datetime.date.fromtimestamp(user_birthdate)
+    user_age = calculate_age_from_date(user_birthdate)
+    if not (min_age <= user_age <= max_age):
+        return False
+
+    return True
+
+
+def sort_priority(news_item, friends, profile):
     if news_item['sticky']:
         return 10
+
+    if not match_target_audience(profile, news_item):
+        return 45
+
     if news_item['users_that_rogered'] and any(
                     user_that_rogered in friends for user_that_rogered in news_item['users_that_rogered']):
         return 20
+
     if news_item['sender'] in friends:
         return 30
+
     return 40

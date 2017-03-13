@@ -14,3 +14,9 @@
 # limitations under the License.
 #
 # @@license_version:1.1@@
+
+# profile gender constants, rogerthat-backend UserProfile model
+GENDER_MALE_OR_FEMALE = 0
+GENDER_MALE = 1
+GENDER_FEMALE = 2
+GENDER_CUSTOM = 3
