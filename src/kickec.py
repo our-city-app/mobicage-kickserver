@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# @@license_version:1.2@@
+# @@license_version:1.3@@
 
 # Content of this file was based on example found at
 # http://butterfat.net/wiki/Documentation/TwistedJabberComponentExample
