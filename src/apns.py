@@ -15,26 +15,26 @@
 #
 # @@license_version:1.3@@
 
-from OpenSSL import SSL, crypto  # @UnresolvedImport
 from binascii import b2a_hex
 import json
 import os
 import socket
 import struct
 import time
-from twisted.internet import reactor
-from twisted.internet.defer import Deferred
-from twisted.internet.ssl import ClientContextFactory
-from twisted.python import log
-from twisted.web.http_headers import Headers
 from urllib import urlencode
 import urllib
 
+from OpenSSL import SSL, crypto  # @UnresolvedImport
 from twisted.application import internet
+from twisted.internet import reactor
+from twisted.internet.defer import Deferred
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory, ClientFactory
+from twisted.internet.ssl import ClientContextFactory
+from twisted.python import log
+from twisted.web.http_headers import Headers
 
 from configuration import configuration, HTTP_GET_APPLE_PUSH_CERTS, APPLE_PUSH_RECONNECT_INTERVAL, \
-    APPLE_CERT_AND_KEY_ENCRYPTION_SECRET, APPLE_PUSH_FEEDBACK_POLL_INTERVAL
+    APPLE_CERT_AND_KEY_ENCRYPTION_SECRET, APPLE_PUSH_FEEDBACK_POLL_INTERVAL, HTTP_BASE_URL
 from util import ReceiverProtocol, decrypt_from_appengine, decode_AES
 
 
@@ -289,7 +289,7 @@ class ApplePushFeedbackFactory(ClientFactory):
             log.err("Could not post back result to appengine (connection refused)!\n")
 
         log.msg("Posting apple push feedback to appengine:\n\ttime: %(time)s\n\tdevice: %(device)s" % locals())
-        url = "https://mobicagecloudhr.appspot.com/api/1/apple_feedback?" + urllib.urlencode((('time', time), ('device', device)))
+        url = configuration[HTTP_BASE_URL] + "/api/1/apple_feedback?" + urllib.urlencode((('time', time), ('device', device)))
 
         d = self.http_agent.request("GET", url, Headers({'X-Nuntiuz-Secret': [self.appengine_secret]}), None)
         d.addCallback(got_response)
