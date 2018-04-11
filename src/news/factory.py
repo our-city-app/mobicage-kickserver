@@ -441,7 +441,10 @@ class NewsFactory(object, Factory):
             self._news[news_id].app_ids = set(news_item['app_ids'])
         news_item['sort_timestamp'] = news_item['sticky_until'] if news_item['sticky_until'] else news_item['timestamp']
 
+        feed_name_mapping = {f['app_id']: f['name'] for f in news_item['feed_names']}
+
         for app_id in news_item['app_ids']:
+            news_item['feed_name'] = feed_name_mapping.get(app_id)
             for connection in self._connections_per_app[app_id]:
                 news_item['sort_priority'] = sort_priority(news_item, connection.friends, connection.profile)
                 if news_item['type'] == 2:
@@ -453,6 +456,8 @@ class NewsFactory(object, Factory):
                         pass
                 line = Responses.NEWS_PUSH % json.dumps(news_item)
                 connection.sendLine(line)
+
+        del news_item['feed_name']
 
 
 # rogerthat-backend utils
@@ -511,7 +516,7 @@ def sort_priority(news_item, friends, profile):
         return 45
 
     if news_item['users_that_rogered'] and any(
-                    user_that_rogered in friends for user_that_rogered in news_item['users_that_rogered']):
+            user_that_rogered in friends for user_that_rogered in news_item['users_that_rogered']):
         return 20
 
     if news_item['sender'] in friends:
